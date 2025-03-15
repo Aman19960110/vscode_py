@@ -13,7 +13,7 @@ st.set_page_config(page_title="Trading Analysis Dashboard", layout="wide")
 
 # Create a sidebar for navigation
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Select Page", ["NSE Derivatives Analysis", "POS File Dashboard"])
+page = st.sidebar.radio("Select Page", "NSE Derivatives Analysis")
 
 # Initialize session state variables if they don't exist
 if 'm2m' not in st.session_state:
@@ -165,7 +165,7 @@ def nse_derivatives_page():
             min_value=1, 
             max_value=20, 
             value=8,
-            help="Strike prices beyond this percentage from the underlying price will be included based on OI threshold"
+            help="Strike prices beyond this percentage from the underlying price will be induclded base on io threshold"
         )
         
         # Sort order options
@@ -260,132 +260,20 @@ def nse_derivatives_page():
         
         st.subheader("How ATM Range Percentage")
         st.info(f"""
-        The ATM (At-The-Money) range percentage defines how far away from the underlying price a strike will be included in token without considering the OI beyond this only strike with OI equal or greater than the threshold will be included in the token:
+        The ATM (At-The-Money) range percentage defines how far away from the underlying price a strike will be inculed in token without considering the oi beyoun this only strike wiht oi equal or greater than the thresold will be inculed in the token:
         
-        - For a {atm_percentage}% setting, strikes that are more than {atm_percentage}% above or below the underlying price will be filtered based on OI.
+        - For a {atm_percentage}% setting, strikes that are more than {atm_percentage}% above or below the underlying price will be filtered based on oi.
         - Lower percentage = stricter filtering (closer to the money)
         - Higher percentage = looser filtering (includes strikes further from the money)
         
         
         """)
 
-#########################
-# POS FILE DASHBOARD PAGE
-#########################
-def pos_file_dashboard():
-    st.title("POSITION MATCHING")
-    st.header("Upload POS File (Excel)")
-    
-    # Function to process the data
-    def parse_pos_contents(file):
-        try:
-            df = pd.read_excel(uploaded_file)
-            st.success(f"Successfully read POS file")
-            
-            # First, display the first few rows to help debugging
-            with st.expander("Data Preview (First 5 Rows)"):
-                st.dataframe(df.head())
-            
-            # Display column names to help with debugging
-            with st.expander("Column Names"):
-                st.write(df.columns.tolist())
-            
-            # Data cleaning and processing steps for POS file
-            # More robust approach to find rows with CE, PE, FX
-            new_data = []
-            for index, row in df.iterrows():
-                if any(keyword in row.values for keyword in ['CE', 'PE', 'FX']):
-                    new_data.append(row)
-            
-            if not new_data:
-                st.warning("No rows found containing 'CE', 'PE', or 'FX'. Please check your file format.")
-                return None, None, None, None, None, None
-            
-            new_data = pd.DataFrame(new_data)
-            new_data.dropna(axis=1, inplace=True)
-            new_data.reset_index(drop=True, inplace=True)
-            
-            # Display processed data preview for debugging
-            with st.expander("Processed Data Preview"):
-                st.dataframe(new_data.head())
-                st.write("Processed data columns:", new_data.columns.tolist())
-            
-            # Calculate exposure and other sums using identified columns
-            try:
-                 # Calculate exposure and other sums
-                exp = new_data[new_data['Unnamed: 7'] == 'FX']['Unnamed: 15'].sum()
-                exp = exp/100000
-                exp = round(exp)
-                exposure = f'{exp} Lac'
-                fx_sum = new_data[new_data['Unnamed: 7'] == 'FX']['Unnamed: 9'].sum()
-                ce_sum = new_data[new_data['Unnamed: 7'] == 'CE']['Unnamed: 9'].sum()
-                pe_sum = new_data[new_data['Unnamed: 7'] == 'PE']['Unnamed: 9'].sum()
-                if abs(fx_sum) == abs(ce_sum) == abs(pe_sum):
-                    position = 'Matched'
-                else:
-                    position = 'Not Matched'
-
-                return new_data, exposure, fx_sum, ce_sum, pe_sum, position
-                
-            except Exception as e:
-                st.error(f"Error in calculations: {str(e)}")
-                return None, None, None, None, None, None, None, None
-        
-        except Exception as e:
-            st.error(f"Error parsing POS file: {str(e)}")
-            return None, None, None, None, None, None, None, None
-    
-    # File uploader
-    uploaded_file = st.file_uploader("Drag and Drop or Select POS File", type=["xls", "xlsx"])
-    
-    # Process uploaded file
-    if uploaded_file is not None:
-        results = parse_pos_contents(uploaded_file)
-        
-        if results is not None and len(results) >= 6:
-            pos_data, exposure, fx_sum, ce_sum, pe_sum, position = results[:6]
-            stock_column = results[6] if len(results) > 6 else None
-            m2m_column = results[7] if len(results) > 7 else None
-            
-            if pos_data is not None:
-                # Store data in session state
-                st.session_state.m2m = pos_data
-                
-                # Display info in expander
-                with st.expander("View Summary Information", expanded=True):
-                    st.write(f"Total Exposure: {exposure}")
-                    st.write(f"Sum for FX: {fx_sum}")
-                    st.write(f"Sum for CE: {ce_sum}")
-                    st.write(f"Sum for PE: {pe_sum}")
-                    st.write(f"Position: {position}")
-                
-                # Create and display the bar chart
-                try:
-                    filtered_data = pos_data[pos_data['Unnamed: 7'] == 'FX'].sort_values(by=['Unnamed: 17'])
-                    filtered_data = filtered_data[filtered_data['Unnamed: 9'] != 0]    
-                    if not filtered_data.empty:
-                        fig = px.bar(filtered_data, x="Unnamed: 0", y="Unnamed: 17",labels={'Unnamed: 0': 'Stocks', 'Unnamed: 17': 'M2M'},title="M2M")  # Create the plot
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("No data available for plotting after filtering.")
-                except Exception as plot_error:
-                    st.error(f"Error creating plot: {str(plot_error)}")
-                
-                # Display raw data table
-                with st.expander("View Raw Data", expanded=False):
-                    st.dataframe(pos_data)
-            else:
-                st.error("Error processing POS file data.")
-        else:
-            st.error("Incomplete results from data processing.")
-    else:
-        st.info("Please upload the POS Excel file.")
 
 # Main app logic - Display the selected page
 if page == "NSE Derivatives Analysis":
     nse_derivatives_page()
-else:
-    pos_file_dashboard()
+
 
 # Add Footer
 st.markdown("---")
